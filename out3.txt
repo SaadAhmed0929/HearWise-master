@@ -1,0 +1,1 @@
+Error: could not open `C:\Program Files\Android\Android Studio\jbr\lib\jvm.cfg'
