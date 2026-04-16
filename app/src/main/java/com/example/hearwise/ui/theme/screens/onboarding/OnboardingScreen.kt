@@ -94,6 +94,13 @@ private val pages = listOf(
 fun OnboardingScreen(
     onFinish: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("HearWisePrefs", android.content.Context.MODE_PRIVATE)
+
+    val finishWithPrefs = {
+        prefs.edit().putBoolean("onboarding_complete", true).apply()
+        onFinish()
+    }
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope      = rememberCoroutineScope()
 
@@ -173,6 +180,12 @@ fun OnboardingScreen(
             ) {
                 // Wordmark — white text, single red dot as brand mark
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.example.hearwise.R.drawable.hearwise_logo),
+                        contentDescription = "HearWise Logo",
+                        modifier = Modifier.height(28.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         text          = "Hear",
                         fontWeight    = FontWeight.Black,
@@ -187,14 +200,6 @@ fun OnboardingScreen(
                         letterSpacing = (-0.5).sp,
                         color         = White
                     )
-                    Spacer(modifier = Modifier.width(3.dp))
-                    // The ONE red element in the top bar — a small brand dot
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(Crimson)
-                    )
                 }
 
                 // Skip
@@ -207,7 +212,7 @@ fun OnboardingScreen(
                         modifier   = Modifier.clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication        = null
-                        ) { onFinish() }
+                        ) { finishWithPrefs() }
                     )
                 }
             }
@@ -237,7 +242,7 @@ fun OnboardingScreen(
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
                         }
                     } else {
-                        onFinish()
+                        finishWithPrefs()
                     }
                 },
                 onBack = {

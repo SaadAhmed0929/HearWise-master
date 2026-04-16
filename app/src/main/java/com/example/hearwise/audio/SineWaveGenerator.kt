@@ -5,6 +5,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import kotlinx.coroutines.*
 import kotlin.math.sin
+import kotlin.math.pow
 
 class SineWaveGenerator {
     private var audioTrack: AudioTrack? = null
@@ -73,15 +74,21 @@ class SineWaveGenerator {
                 if (angle > 2.0 * Math.PI) {
                     angle %= (2.0 * Math.PI)
                 }
-                
-                audioTrack?.write(buffer, 0, buffer.size)
+                try {
+                    audioTrack?.write(buffer, 0, buffer.size)
+                } catch (e: Exception) {
+                    // AudioTrack released or invalid state
+                }
             }
         }
     }
 
-    fun setVolume(volume: Float) {
-        // Clamp 0.0f to 1.0f
-        currentVolume = volume.coerceIn(0.0f, 1.0f)
+    fun setVolumeDb(dbHL: Int) {
+        val safeDb = dbHL.coerceIn(0, 85)
+        // 85 dB HL = 0 dBFS (Max Amplitude = 1.0)
+        val dbFs = safeDb - 85.0
+        val linearGain = 10.0.pow(dbFs / 20.0).toFloat()
+        currentVolume = linearGain.coerceIn(0.0f, 1.0f)
     }
 
     fun stopTone() {

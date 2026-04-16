@@ -16,9 +16,13 @@ fun NavGraph() {
 
     val navController = rememberNavController()
 
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val prefs = context.getSharedPreferences("HearWisePrefs", android.content.Context.MODE_PRIVATE)
+    val isOnboardingComplete = prefs.getBoolean("onboarding_complete", false)
+
     NavHost(
         navController = navController,
-        startDestination = "onboarding"
+        startDestination = if (isOnboardingComplete) "login" else "onboarding"
     ) {
 
         composable(
@@ -27,14 +31,17 @@ fun NavGraph() {
         ) { backStackEntry ->
             val micDenied = backStackEntry.arguments?.getString("micDenied")?.toBoolean() ?: false
             MainScreen(
-                micDenied = micDenied
+                micDenied = micDenied,
+                onRetakeTest = {
+                    navController.navigate("calibration")
+                }
             )
         }
 
         composable("calibration") {
             CalibrationScreen(
                 onCalibrationComplete = {
-                    navController.navigate("main") {
+                    navController.navigate("main?micDenied=false") {
                         popUpTo("calibration") { inclusive = true }
                     }
                 }

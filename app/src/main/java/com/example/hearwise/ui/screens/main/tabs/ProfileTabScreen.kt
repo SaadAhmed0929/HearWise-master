@@ -18,7 +18,9 @@ private val White = Color(0xFFFFFFFF)
 private val Gray400 = Color(0xFF888888)
 
 @Composable
-fun ProfileTabScreen() {
+fun ProfileTabScreen(
+    onRetakeTest: () -> Unit = {}
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -57,7 +59,7 @@ fun ProfileTabScreen() {
         Spacer(modifier = Modifier.height(16.dp))
 
         Button(
-            onClick = { /* Launch test flow */ },
+            onClick = onRetakeTest,
             modifier = Modifier.fillMaxWidth().height(50.dp),
             colors = ButtonDefaults.buttonColors(containerColor = VividRed, contentColor = White)
         ) {

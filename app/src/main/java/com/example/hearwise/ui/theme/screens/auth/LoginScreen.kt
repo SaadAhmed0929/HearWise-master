@@ -125,23 +125,11 @@ fun LoginScreen(
 
             // ── Brand mark ───────────────────────────────────────────────
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // Waveform icon — three bars of varying height
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    listOf(16.dp, 28.dp, 20.dp, 34.dp, 20.dp).forEachIndexed { i, h ->
-                        Box(
-                            modifier = Modifier
-                                .width(4.dp)
-                                .height(h)
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(
-                                    Brush.verticalGradient(listOf(RedGlow, VividRed))
-                                )
-                        )
-                    }
-                }
+                androidx.compose.foundation.Image(
+                    painter = androidx.compose.ui.res.painterResource(id = com.example.hearwise.R.drawable.hearwise_logo),
+                    contentDescription = "HearWise Logo",
+                    modifier = Modifier.height(40.dp)
+                )
 
                 Spacer(modifier = Modifier.width(14.dp))
 

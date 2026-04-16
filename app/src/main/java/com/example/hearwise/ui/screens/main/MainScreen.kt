@@ -24,7 +24,10 @@ enum class MainTab(val title: String) {
 }
 
 @Composable
-fun MainScreen(micDenied: Boolean = false) {
+fun MainScreen(
+    micDenied: Boolean = false,
+    onRetakeTest: () -> Unit = {}
+) {
     var selectedTab by remember { mutableStateOf(MainTab.HOME) }
 
     Scaffold(
@@ -59,7 +62,7 @@ fun MainScreen(micDenied: Boolean = false) {
                 when (tab) {
                     MainTab.HOME -> HomeTabScreen(micDenied)
                     MainTab.CAPTIONS -> CaptionsTabScreen()
-                    MainTab.PROFILE -> ProfileTabScreen()
+                    MainTab.PROFILE -> ProfileTabScreen(onRetakeTest = onRetakeTest)
                     MainTab.SETTINGS -> SettingsTabScreen()
                 }
             }

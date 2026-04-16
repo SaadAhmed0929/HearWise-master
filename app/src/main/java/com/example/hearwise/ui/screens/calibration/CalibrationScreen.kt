@@ -21,13 +21,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.hearwise.audio.SineWaveGenerator
-import com.example.hearwise.data.HearingProfile
-import com.example.hearwise.data.HearingThresholds
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.hearwise.data.ProfileManager
-import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.*
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 
 private val PureBlack = Color(0xFF000000)
 private val VividRed = Color(0xFFFF0000)
@@ -35,109 +32,32 @@ private val BlueLeft = Color(0xFF2196F3)
 private val White = Color(0xFFFFFFFF)
 private val Gray400 = Color(0xFF888888)
 
-enum class CaliPhase { PREP, LEFT_EAR, RIGHT_EAR, DONE }
-
 @Composable
 fun CalibrationScreen(
-    onCalibrationComplete: () -> Unit
+    onCalibrationComplete: () -> Unit,
+    viewModel: CalibrationViewModel = viewModel()
 ) {
+    val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
-    
-    var currentPhase by remember { mutableStateOf(CaliPhase.PREP) }
-    
-    // Testing Sequence
-    val sequence = listOf(1000, 2000, 4000, 8000, 250, 500)
-    var sequenceIndex by remember { mutableIntStateOf(0) }
-    
-    var currentVolume by remember { mutableFloatStateOf(0.0f) }
-    val sineGen = remember { SineWaveGenerator() }
-
-    // Data maps
-    val leftMap = remember { mutableMapOf<Int, Int>() }
-    val rightMap = remember { mutableMapOf<Int, Int>() }
-
-    fun advanceSequence() {
-        if (sequenceIndex < sequence.size - 1) {
-            sequenceIndex++
-        } else {
-            // Reached end of sequence for an ear
-            if (currentPhase == CaliPhase.LEFT_EAR) {
-                currentPhase = CaliPhase.RIGHT_EAR
-                sequenceIndex = 0
-            } else {
-                currentPhase = CaliPhase.DONE
-                
-                // Construct and save Profile
-                val lt = HearingThresholds(
-                    hz_250 = leftMap[250] ?: 0, hz_500 = leftMap[500] ?: 0,
-                    hz_1000 = leftMap[1000] ?: 0, hz_2000 = leftMap[2000] ?: 0,
-                    hz_4000 = leftMap[4000] ?: 0, hz_8000 = leftMap[8000] ?: 0
-                )
-                val rt = HearingThresholds(
-                    hz_250 = rightMap[250] ?: 0, hz_500 = rightMap[500] ?: 0,
-                    hz_1000 = rightMap[1000] ?: 0, hz_2000 = rightMap[2000] ?: 0,
-                    hz_4000 = rightMap[4000] ?: 0, hz_8000 = rightMap[8000] ?: 0
-                )
-                val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-                val profile = HearingProfile(
-                    timestamp = sdf.format(Date()),
-                    leftEar = lt,
-                    rightEar = rt
-                )
-                ProfileManager.saveProfile(context, profile)
-            }
-        }
-    }
-
-    // Audio Loop
-    LaunchedEffect(currentPhase, sequenceIndex) {
-        if (currentPhase == CaliPhase.LEFT_EAR || currentPhase == CaliPhase.RIGHT_EAR) {
-            currentVolume = 0.0f
-            val freq = sequence[sequenceIndex]
-            val isLeft = currentPhase == CaliPhase.LEFT_EAR
-            
-            sineGen.startTone(freq.toDouble(), isLeft)
-            
-            while (currentVolume <= 1.0f) {
-                sineGen.setVolume(currentVolume)
-                delay(1500)
-                currentVolume += 0.05f 
-            }
-            
-            // Loop naturally finishes without them hearing it (deaf at freq)
-            if (currentVolume >= 1.0f) {
-                val dbInt = 100
-                if (isLeft) leftMap[freq] = dbInt else rightMap[freq] = dbInt
-                advanceSequence()
-            }
-        } else {
-            sineGen.stopTone()
-        }
-    }
-
-    // Cleanup cleanly
-    DisposableEffect(Unit) {
-        onDispose { sineGen.stopTone() }
-    }
 
     Box(
         modifier = Modifier.fillMaxSize().background(PureBlack).padding(24.dp),
         contentAlignment = Alignment.Center
     ) {
-        AnimatedContent(targetState = currentPhase, label = "cali_phase") { phase ->
+        AnimatedContent(targetState = uiState.phase, label = "cali_phase") { phase ->
             when (phase) {
-                CaliPhase.PREP -> {
+                TestPhase.PREP -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Calibration", fontSize = 32.sp, color = White, fontWeight = FontWeight.Black)
                         Spacer(modifier = Modifier.height(32.dp))
                         Text(
-                            "• Find a quiet room.\n• Connect your earbuds.\n• Set phone volume to 50%.", 
+                            "• Find a quiet room.\n• Connect your earbuds.\n• Ready when you are.", 
                             color = Gray400, fontSize = 18.sp, lineHeight = 32.sp, textAlign = TextAlign.Left
                         )
                         Spacer(modifier = Modifier.height(48.dp))
                         Button(
-                            onClick = { currentPhase = CaliPhase.LEFT_EAR },
+                            onClick = { viewModel.startCalibration() },
                             colors = ButtonDefaults.buttonColors(containerColor = VividRed, contentColor = White),
                             modifier = Modifier.height(56.dp).fillMaxWidth()
                         ) {
@@ -145,73 +65,80 @@ fun CalibrationScreen(
                         }
                     }
                 }
-                CaliPhase.LEFT_EAR, CaliPhase.RIGHT_EAR -> {
-                    val isLeft = phase == CaliPhase.LEFT_EAR
-                    val freq = sequence[sequenceIndex]
-                    
-                    // Simple Progress mapping
-                    val totalSteps = sequence.size * 2
-                    val currentStep = sequenceIndex + if (isLeft) 0 else sequence.size
-                    val progress = currentStep.toFloat() / totalSteps.toFloat()
+                TestPhase.TESTING -> {
+                    val isLeft = uiState.activeEar == Ear.LEFT
+                    val freq = uiState.currentFreq
+                    val currentDb = uiState.currentDb
 
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        LinearProgressIndicator(
-                            progress = progress,
-                            modifier = Modifier.fillMaxWidth().height(4.dp),
-                            color = VividRed,
-                            trackColor = Gray400
-                        )
-                        
-                        Spacer(modifier = Modifier.height(32.dp))
+                    Column(
+                        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Spacer(modifier = Modifier.height(48.dp))
                         
                         Text(
-                            text = if (isLeft) "Testing Left Ear..." else "Testing Right Ear...",
-                            fontSize = 24.sp, color = if(isLeft) BlueLeft else VividRed, fontWeight = FontWeight.Bold
+                            text = if (isLeft) "Testing Left Ear... $freq Hz" else "Testing Right Ear... $freq Hz",
+                            fontSize = 20.sp, color = if(isLeft) BlueLeft else VividRed, fontWeight = FontWeight.Bold,
+                            textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Text("${freq}Hz", fontSize = 48.sp, color = White, fontWeight = FontWeight.Black)
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Current Volume: $currentDb dB", 
+                            fontSize = 16.sp, color = Gray400, fontWeight = FontWeight.Medium
+                        )
                         
-                        Spacer(modifier = Modifier.height(64.dp))
+                        Spacer(modifier = Modifier.weight(1f))
                         
                         Button(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                // Record volume (convert amplitude percentage to db int stub)
-                                val dbInt = (currentVolume * 100).toInt()
-                                if (isLeft) leftMap[freq] = dbInt else rightMap[freq] = dbInt
-                                advanceSequence()
+                                viewModel.onIHeardIt()
                             },
-                            modifier = Modifier.size(260.dp).clip(CircleShape),
-                            colors = ButtonDefaults.buttonColors(containerColor = VividRed, contentColor = White)
+                            modifier = Modifier.size(280.dp).clip(CircleShape),
+                            colors = ButtonDefaults.buttonColors(containerColor = VividRed, contentColor = White),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
                         ) {
-                            Text("I Hear It", fontSize = 32.sp, fontWeight = FontWeight.Black)
+                            Text("I Hear It", fontSize = 34.sp, fontWeight = FontWeight.Black, letterSpacing = (-1.0).sp)
+                        }
+
+                        Spacer(modifier = Modifier.weight(1f))
+
+                        TextButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                viewModel.onCannotHearIt()
+                            },
+                            modifier = Modifier.padding(bottom = 32.dp).fillMaxWidth()
+                        ) {
+                            Text("I Can't Hear This Tone", color = Gray400, fontSize = 15.sp, fontWeight = FontWeight.Normal)
                         }
                     }
                 }
-                CaliPhase.DONE -> {
+                TestPhase.DONE -> {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Results", fontSize = 32.sp, color = White, fontWeight = FontWeight.Black)
                         Spacer(modifier = Modifier.height(16.dp))
                         
                         // Render Graph
-                        AudiogramCanvas(leftMap, rightMap)
+                        AudiogramCanvas(uiState.leftMap, uiState.rightMap)
 
                         Spacer(modifier = Modifier.height(32.dp))
                         
                         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                             OutlinedButton(
-                                onClick = {
-                                    sequenceIndex = 0
-                                    leftMap.clear()
-                                    rightMap.clear()
-                                    currentPhase = CaliPhase.PREP
-                                },
+                                onClick = { viewModel.resetTest() },
                                 modifier = Modifier.weight(1f).height(50.dp)
                             ) {
                                 Text("Retake Test", color = White)
                             }
                             Button(
-                                onClick = onCalibrationComplete,
+                                onClick = {
+                                    val profile = uiState.finalProfile
+                                    if (profile != null) {
+                                        ProfileManager.saveProfile(context, profile)
+                                    }
+                                    onCalibrationComplete()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = VividRed, contentColor = White),
                                 modifier = Modifier.weight(1f).height(50.dp)
                             ) {
@@ -230,8 +157,8 @@ fun AudiogramCanvas(leftMap: Map<Int, Int>, rightMap: Map<Int, Int>) {
     // Basic Canvas rendering an audiogram
     val freqs = listOf(250, 500, 1000, 2000, 4000, 8000)
     
-    Box(modifier = Modifier.fillMaxWidth().height(250.dp).background(Color(0xFF141414))) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+    Box(modifier = Modifier.fillMaxWidth().height(320.dp).background(Color(0xFF141414))) {
+        androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize().padding(start = 48.dp, end = 24.dp, top = 48.dp, bottom = 48.dp)) {
             val width = size.width
             val height = size.height
             val stepX = width / (freqs.size - 1)
@@ -239,13 +166,53 @@ fun AudiogramCanvas(leftMap: Map<Int, Int>, rightMap: Map<Int, Int>) {
             // Draw axes
             drawLine(Color.DarkGray, Offset(0f, height), Offset(width, height), strokeWidth = 2f)
             drawLine(Color.DarkGray, Offset(0f, 0f), Offset(0f, height), strokeWidth = 2f)
+
+            drawIntoCanvas { canvas ->
+                val paint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.GRAY
+                    textSize = 32f
+                    textAlign = android.graphics.Paint.Align.CENTER
+                }
+                
+                // Draw Legend at Top
+                val legendPaint = android.graphics.Paint().apply {
+                    textSize = 36f
+                    textAlign = android.graphics.Paint.Align.LEFT
+                    isAntiAlias = true
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                }
+                
+                legendPaint.color = android.graphics.Color.parseColor("#2196F3")
+                canvas.nativeCanvas.drawText("Left Ear", 0f, -60f, legendPaint)
+                
+                legendPaint.color = android.graphics.Color.parseColor("#FF0000")
+                canvas.nativeCanvas.drawText("Right Ear", 250f, -60f, legendPaint)
+
+                // Draw Y-Axis labels (dB) & Horizontal Grid Lines
+                paint.textAlign = android.graphics.Paint.Align.RIGHT
+                listOf(0, 20, 40, 60, 80, 100).forEach { db ->
+                    val y = (db / 100f) * height
+                    // Faint grid
+                    drawLine(Color.DarkGray.copy(alpha = 0.3f), Offset(0f, y), Offset(width, y), strokeWidth = 2f)
+                    canvas.nativeCanvas.drawText("${db}dB", -16f, y + 10f, paint)
+                }
+
+                // Draw X-Axis labels (frequencies)
+                paint.textAlign = android.graphics.Paint.Align.CENTER
+                freqs.forEachIndexed { i, f ->
+                    val x = i * stepX
+                    // Faint vertical grid
+                    drawLine(Color.DarkGray.copy(alpha = 0.3f), Offset(x, 0f), Offset(x, height), strokeWidth = 2f)
+                    canvas.nativeCanvas.drawText("${f}Hz", x, height + 48f, paint)
+                }
+            }
             
             fun mapPoint(freqIdx: Int, dbDelta: Int?): Offset {
-                val db = dbDelta ?: 0
+                // dB goes 0 to 85. 0 is Top, 85 is Bottom.
+                val db = (dbDelta ?: 0).coerceIn(0, 100)
                 val x = freqIdx * stepX
-                val y = height - ((100 - db) / 100f * height) // Audiogram technically plots 0dB (normal) at top. Let's map small dB (good) to top.
-                val yInvert = (db / 100f) * height // small volume = good = top
-                return Offset(x, yInvert)
+                val y = (db / 100f) * height
+                return Offset(x, y)
             }
 
             // Draw lines 
@@ -259,12 +226,12 @@ fun AudiogramCanvas(leftMap: Map<Int, Int>, rightMap: Map<Int, Int>) {
                 else { leftPath.lineTo(pl.x, pl.y); rightPath.lineTo(pr.x, pr.y) }
                 
                 // Draw nodes
-                drawCircle(color = BlueLeft, radius = 8f, center = pl)
-                drawCircle(color = VividRed, radius = 8f, center = pr)
+                drawCircle(color = BlueLeft, radius = 10f, center = pl)
+                drawCircle(color = VividRed, radius = 10f, center = pr)
             }
             
-            drawPath(path = leftPath, color = BlueLeft, style = Stroke(width = 4f))
-            drawPath(path = rightPath, color = VividRed, style = Stroke(width = 4f))
+            drawPath(path = leftPath, color = BlueLeft, style = Stroke(width = 6f))
+            drawPath(path = rightPath, color = VividRed, style = Stroke(width = 6f))
         }
     }
 }
