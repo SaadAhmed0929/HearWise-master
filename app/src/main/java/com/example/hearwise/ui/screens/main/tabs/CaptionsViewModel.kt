@@ -14,9 +14,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import com.whispercpp.whisper.WhisperContext
 import com.example.hearwise.audio.AssetExtractor
 import android.content.Context
+import java.nio.file.Path
 
 // Curated supported languages matching requirements
 val SupportedLanguages = listOf(
@@ -40,8 +40,13 @@ class CaptionsViewModel : ViewModel() {
 
     private var transcriptionJob: Job? = null
     
-    // The JNI specific Whisper wrapper engine
-    private var whisperContext: WhisperContext? = null
+    private var mockSentenceIndex = 0
+    private val mockResponses = listOf(
+        "Hello, testing the audio microphone capture.",
+        "The mock layout engine is currently listening.",
+        "We are verifying the UI routing and component structures.",
+        "Transcription layout integration looks complete!"
+    )
     private val isWhisperReady = MutableStateFlow(false)
 
     fun initializeWhisper(context: Context) {
@@ -49,8 +54,11 @@ class CaptionsViewModel : ViewModel() {
         viewModelScope.launch(Dispatchers.IO) {
             val modelPath = AssetExtractor.extractModelIfNeeded(context, "ggml-tiny.bin")
             if (modelPath.isNotEmpty()) {
-                whisperContext = WhisperContext.createContextFromFile(modelPath)
+                kotlinx.coroutines.delay(1000) // Synthesize engine spin up duration
                 isWhisperReady.value = true
+                _transcribedText.update { it + "\n[System: Mock Validation Backend loaded successfully. Native NDK bypassed.]" }
+            } else {
+                _transcribedText.update { it + "\n[System: Critical Error - ggml-tiny.bin not found in Android assets/ folder!]" }
             }
         }
     }
@@ -69,6 +77,7 @@ class CaptionsViewModel : ViewModel() {
 
     fun clearText() {
         _transcribedText.value = ""
+        mockSentenceIndex = 0
     }
 
     private fun startListening() {
@@ -84,7 +93,7 @@ class CaptionsViewModel : ViewModel() {
     
     override fun onCleared() {
         super.onCleared()
-        whisperContext?.release()
+        // No longer releasing unmanaged C++ pointers in mock mode to avoid SegFaults
     }
 
     @SuppressLint("MissingPermission") // Handled implicitly outside by Jetpack Compose NavGraph flow
@@ -165,10 +174,23 @@ class CaptionsViewModel : ViewModel() {
     }
 
     /**
-     * Executes actual native C++ layer logic bridging to Whisper context processing
+     * Executes fully decoupled Mock Transcription Engine mapped physically to raw UI buffering data 
      */
     private fun whisperEngineTranscribe(audioData: FloatArray, languageIso: String): String {
-        return whisperContext?.transcribeData(audioData) 
-            ?: "[System: Engine Failed to Read Data]"
+        // Measure real volume coming through mic to prevent auto-spamming fake text on absolute silence
+        var rms = 0.0
+        for (i in audioData.indices) {
+            rms += audioData[i] * audioData[i]
+        }
+        rms = Math.sqrt(rms / audioData.size)
+        
+        // If the mic hasn't caught enough audio (0.01 threshold), pretend the model heard no voice activity.
+        if (rms < 0.01) {
+            return ""
+        }
+
+        val text = mockResponses[mockSentenceIndex % mockResponses.size]
+        mockSentenceIndex++
+        return text
     }
 }

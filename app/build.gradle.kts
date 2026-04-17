@@ -62,8 +62,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.core.splashscreen)
 
-    // Standard Whisper.cpp Android Wrapper
-    implementation("com.github.Basetis:whisper-android:1.0.0")
+    // JNI Native wrappers will go here if NDK compiling (currently mocked in ViewModel for layout testing)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

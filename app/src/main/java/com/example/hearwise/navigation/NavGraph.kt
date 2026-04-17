@@ -10,6 +10,7 @@ import com.example.hearwise.ui.screens.auth.SignupScreen
 import com.example.hearwise.ui.screens.onboarding.OnboardingScreen
 import com.example.hearwise.ui.screens.onboarding.HearingTestPromptScreen
 import androidx.navigation.navArgument
+import com.example.hearwise.data.ProfileManager
 
 @Composable
 fun NavGraph() {
@@ -22,8 +23,19 @@ fun NavGraph() {
 
     NavHost(
         navController = navController,
-        startDestination = if (isOnboardingComplete) "login" else "onboarding"
+        startDestination = "splash"
     ) {
+
+        composable("splash") {
+            com.example.hearwise.ui.screens.splash.SplashScreen(
+                onSplashFinished = {
+                    val destination = if (isOnboardingComplete) "login" else "onboarding"
+                    navController.navigate(destination) {
+                        popUpTo("splash") { inclusive = true }
+                    }
+                }
+            )
+        }
 
         composable(
             route = "main?micDenied={micDenied}",
@@ -58,7 +70,9 @@ fun NavGraph() {
         composable("login") {
             LoginScreen(
                 onLoginClick = { _, _ ->
-                    navController.navigate("hearing_test_prompt") {
+                    val hasProfile = ProfileManager.loadProfile(context) != null
+                    val destination = if (hasProfile) "main?micDenied=false" else "hearing_test_prompt"
+                    navController.navigate(destination) {
                         popUpTo("login") { inclusive = true }
                     }
                 },
@@ -71,7 +85,9 @@ fun NavGraph() {
         composable("signup") {
             SignupScreen(
                 onSignupClick = {
-                    navController.navigate("hearing_test_prompt") {
+                    val hasProfile = ProfileManager.loadProfile(context) != null
+                    val destination = if (hasProfile) "main?micDenied=false" else "hearing_test_prompt"
+                    navController.navigate(destination) {
                         popUpTo("signup") { inclusive = true }
                     }
                 },
