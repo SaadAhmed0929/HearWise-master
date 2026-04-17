@@ -21,6 +21,14 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        // NDK: build native whisper.cpp for ARM64 (modern Android) and ARMv7 (older devices)
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            }
+        }
     }
 
     buildTypes {
@@ -44,6 +52,14 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // Point Gradle at our CMakeLists.txt so NDK builds libwhisper-hearwise.so
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
+    }
 }
 
 dependencies {
@@ -62,7 +78,7 @@ dependencies {
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.core.splashscreen)
 
-    // JNI Native wrappers will go here if NDK compiling (currently mocked in ViewModel for layout testing)
+    // NDK native library is built via CMake (app/src/main/cpp/CMakeLists.txt)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
