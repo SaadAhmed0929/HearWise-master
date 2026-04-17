@@ -6,8 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
-import com.example.hearwise.navigation.NavGraph
-import com.example.hearwise.ui.theme.HearWiseTheme
+import com.example.hearwise.core.navigation.NavGraph
+import com.example.hearwise.core.theme.HearWiseTheme
 
 class MainActivity : ComponentActivity() {
 
